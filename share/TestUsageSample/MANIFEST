@@ -1,0 +1,8 @@
+Changes
+Makefile.PL
+MANIFEST
+README
+test.pl
+lib/Foo.pm
+lib/Foo_T.pm
+

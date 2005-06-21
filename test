@@ -1,0 +1,13 @@
+The module tests are run by *.t files in the t directory. But once you
+have 'make'd the module, you can try these commands (from the t
+directory) to see what Test::Usage output looks like:
+
+  cd t
+  perl -I../lib -MM1_T -e test
+
+  perl -I../lib -MTest::Usage -e files
+  perl -I../lib -MTest::Usage -e 'files( t => {v => 2, c => 0})'
+
+If you omit the -I option, the currently installed (if any)
+Test::Usage will run.
+
