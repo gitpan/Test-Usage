@@ -1,7 +1,7 @@
 package Test::Usage;
 
 use 5.008;
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 =head1 NAME
 
@@ -577,7 +577,8 @@ the actual messages that would get printed when failures occur.
 
   sub tee_to {
     my ($self, $file_name) = @_;
-    $tee_hdl = IO::File->new("> $file_name");
+    $tee_hdl = IO::File->new($file_name, O_WRONLY|O_APPEND) or die "Bleah '$file_name'.";
+
   }
 
   sub test {
@@ -716,10 +717,10 @@ sub files {
     # Use the user supplied -i* options and the current contents of
     # @INC as the include path (-I) to the perl we will call.
   my $libs = '';
-  $libs = join '',
-      map("-I$options{$_} ",
+  $libs = join ' ',
+      map(qq|"-I$options{$_}"|,
           grep substr($_, 0, 1) eq 'i', sort keys %options),
-      map("-I$_ ", @INC);
+      map(qq|"-I$_"|, @INC);
   my $tot_nb_succ = 0;
   my $tot_nb_fail = 0;
   my $tot_died   = 0;

@@ -1,5 +1,8 @@
 Revision history for Perl extension Test::Usage.
 
+0.05 Thu Jun 23 15:44:07 2005 
+  . Fixed issues with spaces in file and directory names.
+
 0.04 Sun Jun 19 01:41:26 2005
   . Improved the docs.
   . Moved TestUsageSample to ./share and improved it.

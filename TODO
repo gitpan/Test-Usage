@@ -1,5 +1,7 @@
 TODO
 
+. Supply *_T.pm template file.
+
 . Use configuration file for default options to test() and files();
 named .testusage; searched for in same place as Usage.pm, $HOME. If it
 doesn't exist, don't use it.
