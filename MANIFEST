@@ -2,7 +2,10 @@ Changes
 Makefile.PL
 MANIFEST
 README
+Template_T.pm
 TODO
+t/Foo.pm
+t/Foo_T.pm
 t/M1_T.pm
 t/M2_T.pm
 t/SubDir/M1_T.pm
@@ -12,11 +15,4 @@ t/t3.t
 t/t4.t
 test
 lib/Test/Usage.pm
-share/TestUsageSample/lib/Foo.pm
-share/TestUsageSample/lib/Foo_T.pm
-share/TestUsageSample/Changes
-share/TestUsageSample/MANIFEST
-share/TestUsageSample/Makefile.PL
-share/TestUsageSample/README
-share/TestUsageSample/test.pl
 META.yml                                 Module meta-data (added by MakeMaker)

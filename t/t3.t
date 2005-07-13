@@ -3,6 +3,7 @@ use Test::More qw(no_plan);
 use IO::Capture::Stdout;
 
 my $TM_ok = *Test::More::ok;
+my $TM_diag = *Test::More::diag;
 
   # Pass any command line argument to have this test print the
   # Test::Usage output.
@@ -17,12 +18,7 @@ use Test::Usage;
 
 my $t = t();
 
-$TM_ok->($t->time_took() == 0);
-$TM_ok->($t->nb_fail() == 0);
-$TM_ok->($t->nb_succ() == 0);
-
 example('aa', sub {
-  sleep 1;
   ok(1, q|'1' should succeed.|, 'But it failed.');
   ok(0, q|'0' should fail.|,    'And it did.');
 });
@@ -39,10 +35,11 @@ example('a2', sub {
   ok(2, q|'2' should succeed.|, 'But it failed.');
 });
 
+example('__d', sub { ok(die, q|Should die.|,    'And it did.') });
+example('__w', sub { ok(warn, q|Should warn.|,    'And it did.') });
+
 # --------------------------------------------------------------------
 package main;
-
-sub show_time_took     { print ">> took ", $t->time_took(), "\n" }
 
 # These subs take as arguments a string and an expected number of
 # occurences of something the sub will search for in the string. The
@@ -51,26 +48,36 @@ sub show_time_took     { print ">> took ", $t->time_took(), "\n" }
 # Test::Usage.
 
 my %counting_subs = (
-  ok_lines => sub {
+  ok => sub {
     my ($str, $nb_exp) = @_;
     return _what_lines($str, '(?<!not )ok', $nb_exp);
   },
-  not_ok_lines => sub {
+  not_ok => sub {
     my ($str, $nb_exp) = @_;
     return _what_lines($str, 'not ok', $nb_exp);
   },
-  summary_succ => sub {
+  nb_succ => sub {
     my ($str, $nb_exp) = @_;
-    return _summary_what($str, '+', $nb_exp);
+    return _summary_what($str, "+$nb_exp");
   },
-  summary_fail => sub {
+  nb_fail => sub {
     my ($str, $nb_exp) = @_;
-    return _summary_what($str, '-', $nb_exp);
+    return _summary_what($str, "-$nb_exp");
+  },
+  died => sub {
+    my ($str, $exp) = @_;
+    my $sign = $exp == 1 ? '+' : '-';
+    return _summary_what($str, "${sign}d");
+  },
+  warned => sub {
+    my ($str, $exp) = @_;
+    my $sign = $exp == 1 ? '+' : '-';
+    return _summary_what($str, "${sign}w");
   },
 );
 
 sub _what_lines {
-    # $what is one of 'ok' or 'not ok'.
+    # $what is one of '(?<!not )ok' or 'not ok'.
   my ($str, $what, $nb_exp) = @_;
   my $nb_got = () = $str =~ /$what /mg;
   ok($nb_got == $nb_exp, "Expecting $nb_exp $what.")
@@ -78,21 +85,19 @@ sub _what_lines {
 }
 
 sub _summary_what {
-    # $what is one of '+' or '-'.
-  my ($str, $what, $nb_exp) = @_;
+    # $exp is like '+2', '-1', '-d', or '+w'.
+  my ($str, $exp) = @_;
     # It contains something like '(00h:00m:01s).
-  my ($summary_line) = $str =~ /^(.*\(.*\).*)$/m;;
-  my ($nb_got) = $summary_line =~ /#.*?\Q$what\E(\d+).*/;
-  $nb_got = -1 unless defined $nb_got;
-  ok($nb_got == $nb_exp,
-      "Expecting summary to show '$what$nb_exp'.")
+  my ($summary_line) = $str =~ /^(.*\(\d\dh:\d\dm:\d\ds\).*)$/m;;
+  ok(scalar($summary_line =~ / \Q$exp /),
+      "Expecting summary to show '$exp'.")
       or diag("But it did not: '$summary_line'\n");
 }
 
 # --------------------------------------------------------------------
 my $capture_stdout = IO::Capture::Stdout->new();
 
-my $try = sub {
+sub try {
     # Expected counts for data appearing in the output.
   my (
       # A string representing arguments to pass to $t->test(...),
@@ -105,7 +110,9 @@ my $try = sub {
       map { "$_ => '$test_args->{$_}'" } keys %$test_args;
     # Color may interfere with parsing of captured IO.
   t()->{options}{c} = 0;
-  my $invoc = "test($args_str)";
+  my %got;
+  my $invoc = '@got{qw(name time_took nb_succ nb_fail died warned)} '
+      . "= test($args_str)";
   if ($g_show_invoc) {
     $DB::single = 1;
     print "---------- $invoc\n";
@@ -115,80 +122,85 @@ my $try = sub {
     $capture_stdout->start();
     eval $invoc;
     $capture_stdout->stop();
+    $DB::single = 1;
+    for my $what (qw(nb_fail nb_succ died warned)) {
+      my $exp = $exp{$what} || 0;
+      my $got = $got{$what};
+      $TM_ok->($got == $exp,
+          "Expecting $what to be $exp.")
+        or $TM_diag->("But got $got.");
+    }
     my $stdout = join '', $capture_stdout->read();
     $counting_subs{$_}->($stdout, $exp{$_}) for keys %exp;
   }
 };
 
 # --------------------------------------------------------------------
-# Here come the tests.
+# Here are the tests.
 
-$try->([
-  {a => 'aa', v => 0},
-  ok_lines     => 0,
-  not_ok_lines => 0,
-  summary_succ => 1,
-  summary_fail => 1,
-]);
-
-$TM_ok->($t->time_took() <= 1, 'f1') or show_time_took();
-$TM_ok->($t->nb_fail() == 1, 'f2');
-$TM_ok->($t->nb_succ() == 1, 'f3');
-
-$try->([
-  {a => 'aa', v => 0},
-  ok_lines     => 0,
-  not_ok_lines => 0,
-  summary_succ => 1,
-  summary_fail => 1,
-]);
-
-$TM_ok->($t->time_took() <= 1, 'g1') or show_time_took();
-$TM_ok->($t->nb_fail() == 1, 'g2');
-$TM_ok->($t->nb_succ() == 1, 'g3');
-
-$try->($_) for (
+try($_) for (
+  [
+    {a => 'aa', v => 0},
+    ok      => 0,
+    not_ok  => 0,
+    nb_succ => 1,
+    nb_fail => 1,
+  ],
+  [
+    {a => 'aa', v => 0},
+    ok      => 0,
+    not_ok  => 0,
+    nb_succ => 1,
+    nb_fail => 1,
+  ],
   [ {v => 0},
-    ok_lines     => 0,
-    not_ok_lines => 0,
-    summary_succ => 6,
-    summary_fail => 4,
+    ok      => 0,
+    not_ok  => 0,
+    nb_succ => 6,
+    nb_fail => 4,
   ],
   [ {},
-    ok_lines     => 0,
-    not_ok_lines => 4,
-    summary_succ => 6,
-    summary_fail => 4,
+    ok      => 0,
+    not_ok  => 4,
+    nb_succ => 6,
+    nb_fail => 4,
   ],
   [ {v => 2},
-    ok_lines     => 6,
-    not_ok_lines => 4,
-    summary_succ => 6,
-    summary_fail => 4,
+    ok      => 6,
+    not_ok  => 4,
+    nb_succ => 6,
+    nb_fail => 4,
   ],
   [ {a => 'aa'},
-    ok_lines     => 0,
-    not_ok_lines => 1,
-    summary_succ => 1,
-    summary_fail => 1,
+    ok      => 0,
+    not_ok  => 1,
+    nb_succ => 1,
+    nb_fail => 1,
   ],
   [ {a => 'a*'},
-    ok_lines     => 0,
-    not_ok_lines => 2,
-    summary_succ => 3,
-    summary_fail => 2,
+    ok      => 0,
+    not_ok  => 2,
+    nb_succ => 3,
+    nb_fail => 2,
   ],
   [ {a => 'b*', v => 0},
-    ok_lines     => 0,
-    not_ok_lines => 0,
-    summary_succ => 3,
-    summary_fail => 2,
+    ok      => 0,
+    not_ok  => 0,
+    nb_succ => 3,
+    nb_fail => 2,
   ],
   [ {fail => 1},
-    ok_lines     => 0,
-    not_ok_lines => 10,
-    summary_succ => 0,
-    summary_fail => 10,
+    ok      => 0,
+    not_ok  => 10,
+    nb_succ => 0,
+    nb_fail => 10,
+  ],
+  [ {a => '__d', e => '', v => 0},
+    died    => 1,
+  ],
+  [ {a => '__w', e => '', v => 0},
+    warned  => 1,
+    nb_succ => 1,
   ],
 );
 

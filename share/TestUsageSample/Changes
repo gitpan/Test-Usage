@@ -1,6 +1,0 @@
-Revision history for Perl extension TestUsageSample.
-
-0.01  Tue Apr 12 19:31:52 2005
-	- original version; created by h2xs 1.23 with options
-		-A -X -n TestUsageSample
-

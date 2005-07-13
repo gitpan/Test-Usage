@@ -1,18 +1,19 @@
 NAME
-    Test::Usage - Manage test usage example suites throughout module
-    development.
+    Test::Usage - A different approach to testing: selective, quieter,
+    colorful.
 
 SYNOPSIS
-    Let's say we are building module Foo.pm. To exercise it, we write a test
+    Let's say we are building module Foo.pm. To exercise it, we write a
     usage examples module, Foo_T.pm, which may eventually look something
     like this:
 
       package Foo_T;
-      use strict;
       use Test::Usage;
+      use strict;
+      use warnings;
       use Foo;
 
-      example('e1', sub { ...  ok(...); ...  ok(...); ... });
+      example('e1', sub { ...  ok(...); ...  die "Uh oh"; ... });
       example('a1', sub { ...  ok(...) or diag(...); ... });
       example('a2', sub { ...  ok(...); ... });
       example('a3', sub {
@@ -28,40 +29,42 @@ SYNOPSIS
 
     Here are a few ways to test its examples:
 
-      perl -MFoo_T -e 'test(a => "a3")' # Run example a3 only.
-      perl -MFoo_T -e 'test(a => "a*")' # Run all a: a1, a2, a3.
-      perl -MFoo_T -e 'test()'          # Run all: e1, a1, a2, a3.
-      perl -MFoo_T -e 'test(a => "a3", v => 2, c => 0)' # See test().
+        # Run example 'a3' only.
+      perl -MFoo_T -e 'test(a => "a3")'
 
-    To summarize tests ran on all "*_T.pm" files found under current
-    directory:
+        # Run all examples whose label matches glob 'a*': a1, a2, a3.
+      perl -MFoo_T -e 'test(a => "a*")'
 
-      perl -MTest::Usage -e files   # See files().
+        # Run all examples found in the test module.
+      perl -MFoo_T -e test
+
+        # Run example 'a3', reporting successes also, but without color.
+      perl -MFoo_T -e 'test(a => "a3", v => 2, c => 0)'
+
+        # Run and summarize all examples in all "*_T.pm" files found under
+        # current directory.
+      perl -MTest::Usage -e files
 
 DESCRIPTION
-    This module helps Perl developers maintain and run test usage examples.
+    This module approaches testing differently from the standard Perl way.
+    It is selective because it makes it possible to run only selected tests
+    from a test file that may contain many more. It is quieter because by
+    default only failing tests are reported. It is colorful because, if
+    possible, results are displayed using color (with Term::ANSIColor or
+    Win32::Console).
 
-    Test files are usually paired with an ordinary Perl module, Foo.pm for
-    example. The test file is also a Perl module, conventionally named
-    Foo_T.pm, and also conventionally resides in the same directory as
-    Foo.pm (it's really part of the code, so I like it to stay close to the
-    code). If the test module is not associated to any module in particular,
-    that's okay too. The test module has a conventional structure, like the
-    one shown in the SYNOPSIS. Basically, it just names the module, loads
-    Test::Usage and defines a bunch of examples.
+    I usually have a test file named *_T.pm for each ordinary *.pm file in
+    my projects. For example, the test file for Foo.pm would be named
+    Foo_T.pm. I place Foo_T.pm in the same directory as Foo.pm. Foo_T.pm has
+    a conventional structure, like the one shown in the SYNOPSIS. Basically,
+    it just names the module, loads Test::Usage and defines a bunch of
+    examples. Each example(), identified by its label, adds to the tests
+    that the module can run, upon request.
 
-    When Test::Usage is loaded, it determines which color mechanism to apply
-    (currently, ANSI or Win32Console) and it runs its import() method, which
-    sets up a you-might-call-it-a-singleton instance of Test::Usage, setting
-    its test runs counters to 0. It also exports some of its methods to the
-    calling package and some to main, to make them easier to use.
-
-    Each example(), identified by its label, adds to the tests that the
-    module can run, upon request.
-
-    When the developer wishes to run a test, he invokes it from the command
-    line (perhaps with a coating of shell syntaxic sugar), as shown in the
-    synopsis.
+    The module exports some of its methods to the calling package and some
+    to main, to make them easier to use, usually from the shell. When the
+    developer wishes to run a test, he invokes it as shown in the synopsis
+    (perhaps with a coating of shell syntaxic sugar).
 
 METHODS AND FUNCTIONS
     All methods apply to a single instance of Test::Usage, named $t,
@@ -72,13 +75,12 @@ METHODS AND FUNCTIONS
   import ($pkg)
     Sets $t to an empty hash ref, blessed in Test::Usage.
 
-    Resets $t's counters to 0. See the corresponding methods:
+    Resets $t's counters to 0:
 
-      time_took()
-      nb_succ()
-      nb_fail()
-      died()
-      warned()
+      Number of 'ok' that failed.
+      Number of 'ok' that succeeded.
+      Number of examples that died.
+      Number of examples that had warnings.
 
     Sets $t's default label to '-'.
 
@@ -144,7 +146,7 @@ METHODS AND FUNCTIONS
         my $got = $f->get_val();
         ok(
           $got == $exp,
-          "Expected get_val() to be $exp for a new Foo object.",
+          "Expected get_val() to return $exp for a new Foo object.",
           "But got $got.",
         );
       });
@@ -230,10 +232,20 @@ METHODS AND FUNCTIONS
     order they were defined.
 
   ::test (%options)
-    Run all the known examples, subject to the constraints indicated by
-    %options. If %options is undefined or if some of its keys are missing,
-    default values apply. Here is the meaning and default value of the
-    elements of %options:
+    Clears counters and runs all the examples in the module, subject to the
+    constraints indicated by %options. If %options is undefined or if some
+    of its keys are missing, default values apply.
+
+    Returns a list containing the following values:
+
+      Name of the module being tested.
+      Number of seconds it took to run the examples.
+      Number of 'ok' that succeeded.
+      Number of 'ok' that failed.
+      Number of examples that died.
+      Number of examples that had warnings.
+
+    Here is the meaning and default value of the elements of %options:
 
     a => '*' # Accept.
         The value is a glob. Tests whose label matches this glob will be
@@ -279,7 +291,19 @@ METHODS AND FUNCTIONS
         perl -M$file -e 'test()'
 
     The results of each run are collected, examined and tallied, and a
-    summary line is displayed.
+    summary line and a '1..n' line are displayed, something like this:
+
+      # Total +7 -5 0d 1w (00h:00m:00s) in 4 modules
+      1..12
+
+    Returns a list of:
+
+      Number of seconds it took to run the examples.
+      Number of 'ok' that succeeded.
+      Number of 'ok' that failed.
+      Number of examples that died.
+      Number of examples that had warnings.
+      Number of modules that were run.
 
     All values in %options are optional. Their meaning and default value are
     as follows:
@@ -308,58 +332,16 @@ METHODS AND FUNCTIONS
         tested file.
 
   $t->reset_options ()
-    Resets all options to their default values. To display them, run , as
-    defined in %_D.
+    Resets all options to their default values.
 
   $t->options ()
-    Returns a ref to the hash representing current option settings. Its
-    structure is:
-
-  $t->time_took ()
-    Returns the number of seconds the last test() run took. This value is
-    rough and is of limited use for benchmarking.
-
-  $t->nb_fail ()
-    Returns the number of tests that failed during the last test() run.
-
-  $t->nb_succ ()
-    Returns the number of tests that succeeded during the last test() run.
-
-  $t->died ()
-    Returns the number of test()s that die`d.
-
-  $t->warned ()
-    Returns the number of test()s that had warnings.
-
-MOTIVATION
-    Back in the late 90s, readings on Extreme Programming prompted me to try
-    out what is now called Test Driven Development (TDD). The idea is that
-    before you write code, you write a test that demonstrates what the code
-    should do. You can find on the web a lot of literature on TDD, and all
-    I'll say here is that it has radically changed my development
-    experience.
-
-    So at the time, I started building a Perl tool that would help our team
-    at work to benefit from TDD. The Test::Usage module is the current
-    incarnation of this tool.
-
-    One feature of the module is that the user can ask to run only one or a
-    selected number of tests at a time; during code development, we didn't
-    always care to run the whole test suite each time a change was made.
-
-    It turned out that the test files, containing all those examples(),
-    required the same intensity of work and refactoring as the main code
-    itself. The embodied examples evolved as understanding of the
-    requirements did. I think it helped us build better software.
+    Returns a ref to the hash representing current option settings.
 
 Using Test::Usage in a standard Perl module distribution.
-    The supplied ./share/TestUsageSample is an example Perl module that
-    maintains its test suites with Test::Usage.
-
     If you want to distribute your module in the standard Perl fashion, and
     want to make your Test::Usage tests the ones to be run, you need to make
-    Test::Usage a prerequisite in your Makefile.PL, and you can use a
-    test.pl file whose contents are like this:
+    Test::Usage a prerequisite in your Makefile.PL, and use a t/test.t file
+    whose contents are like this:
 
       use strict;
       use FindBin qw($Bin);
@@ -367,10 +349,13 @@ Using Test::Usage in a standard Perl module distribution.
       use Test::Usage;
 
       files(
-        d => "$Bin/lib",
-        i => "$Bin/lib",
-        v => 2,
         c => 0,
+        d => "$Bin/../lib",
+        i => "$Bin/../lib",
+        t => {
+          c => 0,
+          v => 2,
+        },
       );
 
     (Note that this will be evaluated in the 'main' package, where files()

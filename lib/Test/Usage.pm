@@ -1,24 +1,25 @@
 package Test::Usage;
 
 use 5.008;
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 =head1 NAME
 
-Test::Usage - Manage test usage example suites throughout module development.
+Test::Usage - A different approach to testing: selective, quieter, colorful.
 
 =head1 SYNOPSIS
 
 Let's say we are building module Foo.pm. To exercise it, we write a
-test usage examples module, Foo_T.pm, which may eventually look
-something like this:
+usage examples module, Foo_T.pm, which may eventually look something
+like this:
 
   package Foo_T;
-  use strict;
   use Test::Usage;
+  use strict;
+  use warnings;
   use Foo;
 
-  example('e1', sub { ...  ok(...); ...  ok(...); ... });
+  example('e1', sub { ...  ok(...); ...  die "Uh oh"; ... });
   example('a1', sub { ...  ok(...) or diag(...); ... });
   example('a2', sub { ...  ok(...); ... });
   example('a3', sub {
@@ -34,43 +35,43 @@ something like this:
 
 Here are a few ways to test its examples:
 
-  perl -MFoo_T -e 'test(a => "a3")' # Run example a3 only.
-  perl -MFoo_T -e 'test(a => "a*")' # Run all a: a1, a2, a3.
-  perl -MFoo_T -e 'test()'          # Run all: e1, a1, a2, a3.
-  perl -MFoo_T -e 'test(a => "a3", v => 2, c => 0)' # See test().
+    # Run example 'a3' only.
+  perl -MFoo_T -e 'test(a => "a3")'
 
-To summarize tests ran on all "*_T.pm" files found under current
-directory:
+    # Run all examples whose label matches glob 'a*': a1, a2, a3.
+  perl -MFoo_T -e 'test(a => "a*")'
 
-  perl -MTest::Usage -e files   # See files().
+    # Run all examples found in the test module.
+  perl -MFoo_T -e test
+
+    # Run example 'a3', reporting successes also, but without color.
+  perl -MFoo_T -e 'test(a => "a3", v => 2, c => 0)'
+
+    # Run and summarize all examples in all "*_T.pm" files found under
+    # current directory.
+  perl -MTest::Usage -e files
 
 =head1 DESCRIPTION
 
-This module helps Perl developers maintain and run test usage
-examples.
+This module approaches testing differently from the standard Perl way.
+It is selective because it makes it possible to run only selected
+tests from a test file that may contain many more.  It is quieter
+because by default only failing tests are reported.  It is colorful
+because, if possible, results are displayed using color (with
+Term::ANSIColor or Win32::Console).
 
-Test files are usually paired with an ordinary Perl module, Foo.pm for
-example. The test file is also a Perl module, conventionally named
-Foo_T.pm, and also conventionally resides in the same directory as
-Foo.pm (it's really part of the code, so I like it to stay close to
-the code). If the test module is not associated to any module in
-particular, that's okay too. The test module has a conventional
-structure, like the one shown in the SYNOPSIS. Basically, it just
-names the module, loads Test::Usage and defines a bunch of examples.
+I usually have a test file named *_T.pm for each ordinary *.pm file in
+my projects. For example, the test file for Foo.pm would be named
+Foo_T.pm. I place Foo_T.pm in the same directory as Foo.pm.  Foo_T.pm
+has a conventional structure, like the one shown in the SYNOPSIS.
+Basically, it just names the module, loads Test::Usage and defines a
+bunch of examples.  Each example(), identified by its label, adds to
+the tests that the module can run, upon request.
 
-When Test::Usage is loaded, it determines which color mechanism to
-apply (currently, ANSI or Win32Console) and it runs its import()
-method, which sets up a you-might-call-it-a-singleton instance of
-Test::Usage, setting its test runs counters to 0. It also exports some
-of its methods to the calling package and some to main, to make them
-easier to use.
-
-Each example(), identified by its label,  adds to the tests that the
-module can run, upon request.
-
-When the developer wishes to run a test, he invokes it from the
-command line (perhaps with a coating of shell syntaxic sugar), as
-shown in the synopsis.
+The module exports some of its methods to the calling package and some
+to main, to make them easier to use, usually from the shell.  When the
+developer wishes to run a test, he invokes it as shown in the synopsis
+(perhaps with a coating of shell syntaxic sugar).
 
 =cut
 
@@ -183,7 +184,7 @@ $_D{m} = {
 $_D{c} = {
   what    => 'cBoldWhite',
   died    => 'cBoldMagenta',
-  warning => 'cBoldCyan',
+  warned  => 'cBoldCyan',
   summary => 'cYellow',
   success => 'cBoldGreen',
   failure => 'cBoldRed',
@@ -208,13 +209,12 @@ The module defines the following methods and functions.
 
 Sets $t to an empty hash ref, blessed in Test::Usage.
 
-Resets $t's counters to 0. See the corresponding methods:
+Resets $t's counters to 0:
 
-  time_took()
-  nb_succ()
-  nb_fail()
-  died()
-  warned()
+  Number of 'ok' that failed.
+  Number of 'ok' that succeeded.
+  Number of examples that died.
+  Number of examples that had warnings.
 
 Sets $t's default label to '-'.
 
@@ -267,12 +267,11 @@ sub import {
   $t->{examples}  = [];
     # Default label.
   $t->{label}     = '-';
-    # Counters.
-  $t->{time_took} = 0;
+    # Private counters.
   $t->{nb_succ}   = 0;
   $t->{nb_fail}   = 0;
-    # Incremented when an ok*() causes respectively a die or a
-    # warning.
+    # Incremented respectively when a die or a warning occur within an
+    # example().
   $t->{died}      = 0;
   $t->{warned}    = 0;
 
@@ -329,7 +328,7 @@ Here's a full example:
     my $got = $f->get_val();
     ok(
       $got == $exp,
-      "Expected get_val() to be $exp for a new Foo object.",
+      "Expected get_val() to return $exp for a new Foo object.",
       "But got $got.",
     );
   });
@@ -354,8 +353,8 @@ true, $t will increment the number of successful tests it has seen,
 else the number of failed tests.
 
 Note that $bool will be evaluated in list context; for example, if you
-want to use a bind operator here, make sure you wrap it with
-'scalar'. For example:
+want to use a bind operator here, make sure you wrap it with 'scalar'.
+For example:
 
   ok(scalar($x =~ /abc/),
     "Expected \$x to match /abc/.",
@@ -376,12 +375,11 @@ printed, something like one of the following will be printed:
     # Expected $x to match /abc/.
     # But its value was 'def'.
 
-ok() is most useful when it describes expected result and helps
-debug when it fails. So the $exp_msg should tell the user what
-the test is expecting, and the $got_msg, what it got instead.  It
-is useful to formulate them in terms that are useful for
-development, maintenance, and debugging.  Compare the following
-examples:
+ok() is most useful when it describes expected result and helps debug
+when it fails. So the $exp_msg should tell the user what the test is
+expecting, and the $got_msg, what it got instead.  It is useful to
+formulate them in terms that are useful for development, maintenance,
+and debugging.  Compare the following examples:
 
 =over 4
 
@@ -446,6 +444,42 @@ sub ok_labeled {
 
 # --------------------------------------------------------------------
 
+=begin maint $self->_confirm ($label, $bool, $exp_msg, $got_msg)
+
+Returns true if argument $bool is true, false otherwise. Also returns
+false if the 'fail' option is set.
+
+=end maint
+
+=cut
+
+sub _confirm {
+  my ($self, $label, $bool, $exp_msg, $got_msg) = @_;
+  $bool = 0 if $self->options()->{fail};
+  ($bool && ++$self->{nb_succ}) || ++$self->{nb_fail};
+  my $verbosity = $self->options()->{v};
+  $exp_msg = '' unless defined $exp_msg;
+  $got_msg = '' unless defined $got_msg;
+  if ($verbosity == REPORT_ALL || ($verbosity == REPORT_FAILURES && ! $bool)) {
+    $self->printk('what', $bool ? 'ok ' : 'not ok ');
+    my $printk_type = $bool ? 'success' : 'failure';
+    $self->printk($printk_type, "$label\n");
+    if ($exp_msg ne '') {
+      $exp_msg =~ s/^/  # /gm;
+      $exp_msg =~ s/\n*$/\n/;
+      $self->printk($printk_type, $exp_msg);
+    }
+    if (! $bool && $got_msg ne '') {
+      $got_msg =~ s/^/  # /gm;
+      $got_msg =~ s/\n*$/\n/;
+      $self->printk($printk_type, $got_msg);
+    }
+  }
+  return $bool;
+}
+
+# --------------------------------------------------------------------
+
 =head2 $pkg::diag (@msgs)
 
 Prefixes each line of each string in @msgs with '  # ' and displays
@@ -470,42 +504,6 @@ sub diag {
 
 # --------------------------------------------------------------------
 
-=begin maint $self->_confirm ($label, $bool, $exp_msg, $got_msg)
-
-Returns true if argument $bool is true, false otherwise. Also returns
-false if the 'fail' parameter was passed to the constructor.
-
-=end maint
-
-=cut
-
-sub _confirm {
-  my ($self, $label, $bool, $exp_msg, $got_msg) = @_;
-  $bool = 0 if $self->options()->{fail};
-  ($bool && $self->_incr_nb_succ()) || $self->_incr_nb_fail();
-  my $verbosity = $self->options()->{v};
-  $exp_msg = '' unless defined $exp_msg;
-  $got_msg = '' unless defined $got_msg;
-  if ($verbosity == REPORT_ALL || ($verbosity == REPORT_FAILURES && ! $bool)) {
-    $self->printk('what', $bool ? 'ok ' : 'not ok ');
-    my $printk_type = $bool ? 'success' : 'failure';
-    $self->printk($printk_type, "$label\n");
-    if ($exp_msg ne '') {
-      $exp_msg =~ s/^/  # /gm;
-      $exp_msg =~ s/\n*$/\n/;
-      $self->printk($printk_type, $exp_msg);
-    }
-    if (! $bool && $got_msg ne '') {
-      $got_msg =~ s/^/  # /gm;
-      $got_msg =~ s/\n*$/\n/;
-      $self->printk($printk_type, $got_msg);
-    }
-  }
-  return $bool;
-}
-
-# --------------------------------------------------------------------
-
 =head2 ::labels ()
 
 Returns a ref to an array holding the labels of all the examples, in
@@ -521,10 +519,20 @@ sub labels {
 
 =head2 ::test (%options)
 
-Run all the known examples, subject to the constraints indicated by
-%options.  If %options is undefined or if some of its keys are
-missing, default values apply.  Here is the meaning and default value
-of the elements of %options:
+Clears counters and runs all the examples in the module, subject to
+the constraints indicated by %options.  If %options is undefined or if
+some of its keys are missing, default values apply.
+
+Returns a list containing the following values:
+
+  Name of the module being tested.
+  Number of seconds it took to run the examples.
+  Number of 'ok' that succeeded.
+  Number of 'ok' that failed.
+  Number of examples that died.
+  Number of examples that had warnings.
+
+Here is the meaning and default value of the elements of %options:
 
 =over 4
 
@@ -575,15 +583,18 @@ the actual messages that would get printed when failures occur.
 {
   my $tee_hdl;
 
-  sub tee_to {
+  sub _tee_to {
     my ($self, $file_name) = @_;
-    $tee_hdl = IO::File->new($file_name, O_WRONLY|O_APPEND) or die "Bleah '$file_name'.";
-
+    $tee_hdl = IO::File->new($file_name, O_WRONLY|O_APPEND)
+        or die "Couldn't write to '$file_name'.";
   }
 
   sub test {
     my ($self, %options) = @_;
-    $self->{nb_succ} = $self->{nb_fail} = 0;
+    $self->{nb_succ}  = 0;
+    $self->{nb_fail}  = 0;
+    $self->{died}     = 0;
+    $self->{warned}   = 0;
       # Run examples matching this glob.
     my $accept = glob_to_regex(
       defined($options{a})
@@ -601,7 +612,7 @@ the actual messages that would get printed when failures occur.
     $self->{options}{fail} = $options{fail} if defined $options{fail};
     my $start_time = time;
       # Run the examples.
-    $self->printk('summary', '# ' . $self->{name} . "\n") if $options{in_files};
+    $self->printk('summary', '# ' . $self->{name} . "\n");
     for my $example (@{$self->{examples}}) {
       my $label   = $example->{label};
       my $sub_ref = $example->{sub_ref};
@@ -621,7 +632,7 @@ the actual messages that would get printed when failures occur.
       };
       if ($warnings) {
         $self->printk('keyword', 'WARNED ');
-        $self->printk('warning', $warnings);
+        $self->printk('warned', $warnings);
         ++$self->{warned};
       }
       if ($@) {
@@ -630,23 +641,38 @@ the actual messages that would get printed when failures occur.
         ++$self->{died};
       }
     }
-    $self->{time_took} = time - $start_time;
-    my $summary = sprintf "  # +%d -%d %sd %sw (%s) %s\n",
-      $self->nb_succ(),
-      $self->nb_fail(),
-      ($self->died() ? '+' : '-'),
-      ($self->warned() ? '+' : '-'),
-      _elapsed_str($self->{time_took}),
-      $self->{name},
-    ;
-    print $tee_hdl $summary if $tee_hdl;
-    my $print_summary  = defined($options{s}) ? $options{s} : $self->{options}{s};
-    if ($print_summary) {
-      $self->printk('summary', sprintf "1..%d\n",
-          $self->nb_succ() + $self->nb_fail()) unless $options{in_files};
-      $self->printk('summary', $summary);
+    my $time_took = time - $start_time;
+    my $summary = join(' ',
+      $self->sprintk('summary', '  #'),
+      $self->sprintk('success', '+' . $self->{nb_succ}),
+      $self->sprintk('failure', '-' . $self->{nb_fail}),
+      $self->sprintk('died',    ($self->{died} ? '+' : '-') . 'd'),
+      $self->sprintk('warned',  ($self->{warned} ? '+' : '-') . 'w'),
+      $self->sprintk('summary', '(' .  _elapsed_str($time_took) . ') '),
+      $self->sprintk('summary', $self->{name}),
+    ) . "\n";
+    if ($tee_hdl) {
+      print $tee_hdl 
+      ' nb_succ ',   $self->{nb_succ},
+      ' nb_fail ',   $self->{nb_fail},
+      ' died ',      $self->{died},
+      ' warned ',    $self->{warned},
+      ' time_took ', _elapsed_str($time_took),
+      "\n"
+    }
+    if (defined($options{s}) ? $options{s} : $self->{options}{s}) {
+      print $summary;
+     # $self->printk('summary', $summary);
     }
     $self->reset_options();
+    return
+      $self->{name},
+      $time_took,
+      $self->{nb_succ},
+      $self->{nb_fail},
+      $self->{died},
+      $self->{warned},
+    ;
   }
 
 }
@@ -662,7 +688,19 @@ calls perl in a subshell to run something like this:
     perl -M$file -e 'test()'
 
 The results of each run are collected, examined and tallied, and a
-summary line is displayed.
+summary line and a '1..n' line are displayed, something like this:
+
+  # Total +7 -5 0d 1w (00h:00m:00s) in 4 modules
+  1..12
+
+Returns a list of:
+
+  Number of seconds it took to run the examples.
+  Number of 'ok' that succeeded.
+  Number of 'ok' that failed.
+  Number of examples that died.
+  Number of examples that had warnings.
+  Number of modules that were run.
 
 All values in %options are optional. Their meaning and default value
 are as follows:
@@ -745,38 +783,46 @@ sub files {
     my (undef, $file_name) = tempfile(UNLINK => 1);
       # Try to make quotes OS-neutral.
     my $prog = qq{$^X $libs -e "use $module; }
-        . qq{t()->tee_to(q[$file_name]); test(in_files => 1, $t_options)"};
+        . qq{t()->_tee_to(q[$file_name]); test($t_options)"};
     system "$prog";
     my $result = read_file($file_name);
-      # Parse out the results line.
-      # +1 -1 -d -w (00h:00m:00s) Module2_T
-    my ($result_line, $nb_succ, $nb_fail, $died_sign, $warned_sign,
+    my ($nb_succ, $nb_fail, $died, $warned,
         $hrs, $mins, $secs)
         = $result =~ /
-          (\s+ \# \s+
-          \+(\d+) \s+ -(\d+) \s+
-          ([+-])d \s+ ([+-])w \s+
-          \( (\d+)h : (\d+)m : (\d+)s \) \s+
-          $module
-        )/x;
+      nb_succ   \s+ (\S+) \s+
+      nb_fail   \s+ (\S+) \s+
+      died      \s+ (\S+) \s+
+      warned    \s+ (\S+) \s+
+      time_took \s+ (..)h:(..)m:(..)
+        /x;
     $tot_nb_succ += $nb_succ || 0;
     $tot_nb_fail += $nb_fail || 0;
-    ++$tot_died   if ($died_sign || '') eq '+';
-    ++$tot_warned if ($warned_sign || '') eq '+';
+    $tot_died    += $died    || 0;
+    $tot_warned  += $warned  || 0;
     $tot_hrs  += $hrs || 0;
     $tot_mins += $mins || 0;
     $tot_secs += $secs || 0;
     ++$nb_modules;
   };
   my $tot_time = _elapsed_str($tot_hrs * 3600 + $tot_mins * 60 + $tot_secs);
-  $pkg->printk('summary',
-    sprintf"  # Total +%s -%d %dd %dw ($tot_time) in %d modules.\n",
+    # Summary line.
+  $pkg->printk('summary', '# Total ');
+  $pkg->printk('success', "+$tot_nb_succ ");
+  $pkg->printk('failure', "-$tot_nb_fail ");
+  $pkg->printk('died',    "${tot_died}d ");
+  $pkg->printk('warned',  "${tot_warned}w ");
+  $pkg->printk('summary', "($tot_time) ");
+  $pkg->printk('summary', "in $nb_modules modules.\n");
+    # '1..n' line.
+  $pkg->printk('summary', sprintf "1..%d\n", $tot_nb_succ + $tot_nb_fail);
+  return
+    $tot_time,
     $tot_nb_succ,
     $tot_nb_fail,
     $tot_died,
     $tot_warned,
     $nb_modules,
-  );
+  ;
 }
 
 # --------------------------------------------------------------------
@@ -799,13 +845,13 @@ sub _adjust_verbosity {
 
 # --------------------------------------------------------------------
 
-=begin maint $t->printk ($color_tag, $text)
+=begin maint $t->sprintk ($color_tag, $text)
 
 $color_tag, which will map into the color table, is one of:
 
   what
   died
-  warning
+  warned
   summary
   success
   failure
@@ -816,37 +862,44 @@ $color_tag, which will map into the color table, is one of:
 
 =cut
 
-sub printk {
+sub sprintk {
   my ($self, $color_tag, $text) = @_;
-  print($text), return unless $gColor->{id} && $self->{options}{c};
+  return $text unless $gColor->{id} && $self->{options}{c};
   my $raw_color = $_D{c}{$color_tag} || $_D{c}{default};
   my $cooked_color = $gColor->{palette}{$raw_color};
+  my $ret_str = '';
   if ($gColor->{id} eq 'Win32Console') {
     $gColor->{out}->Attr($cooked_color);
     $gColor->{out}->Write($&) while $text =~ /.{1,1000}/gs;
     $gColor->{out}->Attr($::FG_GRAY | $::BG_BLACK);
   }
   elsif ($gColor->{id} eq 'ANSI') {
-    print Term::ANSIColor::color($cooked_color);
+    $ret_str .= Term::ANSIColor::color($cooked_color);
       # Make sure the color reset command is part of the last line
       # (simplifies testing).
     my $chomped = chomp $text;
-    print $text;
-    print Term::ANSIColor::color('reset');
-    print "\n" if $chomped;
+    $ret_str .= $text;
+    $ret_str .= Term::ANSIColor::color('reset');
+    $ret_str .= "\n" if $chomped;
   }
     # Unknown color id.
   else {
-    print $text;
+    $ret_str .= $text;
   }
+  return $ret_str;
+}
+
+# --------------------------------------------------------------------
+sub printk {
+  my ($self, $color_tag, $text) = @_;
+  print $self->sprintk($color_tag, $text);
 }
 
 # --------------------------------------------------------------------
 
 =head2 $t->reset_options ()
 
-Resets all options to their default values. To display them, run
-, as defined in %_D.
+Resets all options to their default values.
 
 =cut
 
@@ -860,68 +913,11 @@ sub reset_options {
 
 =head2 $t->options ()
 
-Returns a ref to the hash representing current option settings. Its
-structure is:
+Returns a ref to the hash representing current option settings.
 
 =cut
 
 sub options { $t->{options} }
-
-# --------------------------------------------------------------------
-
-=head2 $t->time_took ()
-
-Returns the number of seconds the last test() run took. This value is
-rough and is of limited use for benchmarking.
-
-=cut
-
-sub time_took { $_[0]->{time_took} }
-
-# --------------------------------------------------------------------
-
-=head2 $t->nb_fail ()
-
-Returns the number of tests that failed during the last test() run.
-
-=cut
-
-sub nb_fail { $_[0]->{nb_fail} }
-
-# --------------------------------------------------------------------
-
-=head2 $t->nb_succ ()
-
-Returns the number of tests that succeeded during the last test() run.
-
-=cut
-
-sub nb_succ { $_[0]->{nb_succ} }
-
-# --------------------------------------------------------------------
-
-=head2 $t->died ()
-
-Returns the number of test()s that die`d.
-
-=cut
-
-sub died { $_[0]->{died} }
-
-# --------------------------------------------------------------------
-
-=head2 $t->warned ()
-
-Returns the number of test()s that had warnings.
-
-=cut
-
-sub warned { $_[0]->{warned} }
-
-# --------------------------------------------------------------------
-sub _incr_nb_fail  { ++$_[0]->{nb_fail} }
-
-sub _incr_nb_succ  { ++$_[0]->{nb_succ} }
 
 # --------------------------------------------------------------------
 
@@ -974,38 +970,12 @@ sub new {
 1;
 __END__
 
-=head1 MOTIVATION
-
-Back in the late 90s, readings on Extreme Programming prompted me to
-try out what is now called Test Driven Development (TDD). The idea is
-that before you write code, you write a test that demonstrates what
-the code should do.  You can find on the web a lot of literature on
-TDD, and all I'll say here is that it has radically changed my
-development experience.
-
-So at the time, I started building a Perl tool that would help our
-team at work to benefit from TDD.  The Test::Usage module is the
-current incarnation of this tool.
-
-One feature of the module is that the user can ask to run only one or
-a selected number of tests at a time; during code development, we
-didn't always care to run the whole test suite each time a change was
-made.
-
-It turned out that the test files, containing all those examples(),
-required the same intensity of work and refactoring as the main code
-itself. The embodied examples evolved as understanding of the
-requirements did. I think it helped us build better software.
-
 =head1 Using Test::Usage in a standard Perl module distribution.
-
-The supplied ./share/TestUsageSample is an example Perl module that
-maintains its test suites with Test::Usage.
 
 If you want to distribute your module in the standard Perl fashion,
 and want to make your Test::Usage tests the ones to be run, you need
-to make Test::Usage a prerequisite in your Makefile.PL, and you can
-use a test.pl file whose contents are like this:
+to make Test::Usage a prerequisite in your Makefile.PL, and use a
+t/test.t file whose contents are like this:
 
   use strict;
   use FindBin qw($Bin);
@@ -1013,10 +983,13 @@ use a test.pl file whose contents are like this:
   use Test::Usage;
 
   files(
-    d => "$Bin/lib",
-    i => "$Bin/lib",
-    v => 2,
     c => 0,
+    d => "$Bin/../lib",
+    i => "$Bin/../lib",
+    t => {
+      c => 0,
+      v => 2,
+    },
   );
 
 (Note that this will be evaluated in the 'main' package, where files()

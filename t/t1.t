@@ -1,14 +1,13 @@
 use strict;
+use warnings;
 use Test::More qw(no_plan);
 use IO::Capture::Stdout;
 
-my $TM_ok   = *Test::More::ok;
-my $TM_diag = *Test::More::diag;
 my $capture_stdout = IO::Capture::Stdout->new();
 
   # Pass any command line argument to have this test print the
   # Test::Usage output.
-my $show_examples_output = $ARGV[0];
+my $show_examples_output = defined $ARGV[0];
 
 # --------------------------------------------------------------------
 package test1;
@@ -27,20 +26,20 @@ sub try {
   eval $expr_to_eval;
   $capture_stdout->stop();
   my $got_text = join '', $capture_stdout->read();
-  print $got_text if $show_examples_output;
+  print($got_text), return if $show_examples_output;
   my ($exp_Ok, $exp_NotOk, $exp_Exp, $exp_Got, $exp_label) = @$exp_lines;
   $exp_label = '-' unless defined $exp_label;
     # There will be a label only if there is an 'ok' or 'not ok' line.
   if ($exp_Ok || $exp_NotOk) {
-    $TM_ok->(scalar($got_text =~ /^.*$exp_label/),
+    Test::More::ok(scalar($got_text =~ /^.*$exp_label/),
         "Expecting label to match '$exp_label'.")
-      or $TM_diag->("But it didn't:\n$got_text");
+      or Test::More::diag("But it didn't:\n$got_text");
   }
   my $exp_nb_lines = $exp_Ok + $exp_NotOk + $exp_Exp + $exp_Got;
   my $got_nb_lines = @{[split /\n/, $got_text]};
-  $TM_ok->($got_nb_lines == $exp_nb_lines,
+  Test::More::ok($got_nb_lines == $exp_nb_lines,
       "Expecting output to have $exp_nb_lines lines.")
-      or $TM_diag->("But got $got_nb_lines:\n$got_text");
+      or Test::More::diag("But got $got_nb_lines:\n$got_text");
   foo($got_text, $exp_Ok,    '(?<!not )ok');
   foo($got_text, $exp_NotOk, 'not ok');
   foo($got_text, $exp_Exp,   'Exp');
@@ -50,9 +49,9 @@ sub try {
 sub foo {
   my ($got_text, $exp_matched, $patt) = @_;
   my $got_matched = $got_text =~ /$patt/;
-  $TM_ok->($got_matched == $exp_matched,
+  Test::More::ok($got_matched == $exp_matched,
       sprintf("Expecting '$patt' %sto match.", $exp_matched ? '' : 'not '))
-    or $TM_diag->("But it didn't:\n$got_text");
+    or Test::More::diag("But it didn't:\n$got_text");
 }
 
 # --------------------------------------------------------------------
@@ -72,9 +71,9 @@ my @tries = (
   # Expected counts of
   # [[notOk, Ok, Exp, Got], $expr, test_options],
 
-  [[0,    0, 0,  0], $ok_1 , {v => 0}],
-  [[0,    0, 0,  0], $ok_1 , {v => 1}],
-  [[1,    0, 0,  0], $ok_1 , {v => 2}],
+  [[0, 0, 0, 0], $ok_1 , {v => 0}],
+  [[0, 0, 0, 0], $ok_1 , {v => 1}],
+  [[1, 0, 0, 0], $ok_1 , {v => 2}],
 
   [[0, 0, 0, 0], $ok_2 , {v => 0}],
   [[0, 0, 0, 0], $ok_2 , {v => 1}],

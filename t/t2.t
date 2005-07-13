@@ -24,9 +24,6 @@ $TM_ok->($got_labels eq $exp_labels, "Expecting labels() to be '$exp_labels'")
     or diag("But got '$got_labels'.");
 
 # --------------------------------------------------------------------
-# This test will not be affected by the presence of ANSI color
-# indicators.
-
 sub try {
   my ($test_args_ref, %exp) = @_;
   $capture_stdout->start();

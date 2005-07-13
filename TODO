@@ -1,18 +1,14 @@
 TODO
 
-. Supply *_T.pm template file.
-
 . Use configuration file for default options to test() and files();
-named .testusage; searched for in same place as Usage.pm, $HOME. If it
-doesn't exist, don't use it.
+for example, it could be named .testusage, searched for in same place
+as Usage.pm, $HOME; if it didn't exist, don't use it.
 
 . Allow files() to take a list of files as an argument, in addition
 to/instead of the 'd' option.
 
 . Explain what type of glob a and e match. Make the globs a bit
 smarter, allowing for example 'a[123]'.
-
-. Test accepts and excludes.
 
 . Warn (die?) if test labels are duplicated.
 

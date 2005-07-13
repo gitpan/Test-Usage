@@ -1,5 +1,0 @@
-TestUsageSample
-
-This illustrates Foo.pm using Test::Usage to maintain its tests, in
-Foo_T.pm.
-
