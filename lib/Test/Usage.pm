@@ -1,7 +1,7 @@
 package Test::Usage;
 
 use 5.008;
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 =head1 NAME
 
@@ -735,6 +735,10 @@ added in the order of the sorted 'i*' keys.
 These options will be passed to the test() method, invoked for each
 tested file.
 
+=item follow => 1 # Follow symlinks wehn looking for files.
+
+This is hard-coded for now, it cannot change. FIXME
+
 =back
 
 =cut
@@ -778,11 +782,12 @@ sub files {
     return unless defined $module;
     push @found_modules, $module;
   };
-  find($wanted, $_) for @dirs;
+  find({wanted => $wanted, follow => 1}, $_) for @dirs;
+  my $start_time = time;
   for my $module (sort @found_modules) {
     my (undef, $file_name) = tempfile(UNLINK => 1);
       # Try to make quotes OS-neutral.
-    my $prog = qq{$^X $libs -e "use $module; }
+    my $prog = qq{$^X $libs -w -e "use $module; }
         . qq{t()->_tee_to(q[$file_name]); test($t_options)"};
     system "$prog";
     my $result = read_file($file_name);
@@ -804,7 +809,7 @@ sub files {
     $tot_secs += $secs || 0;
     ++$nb_modules;
   };
-  my $tot_time = _elapsed_str($tot_hrs * 3600 + $tot_mins * 60 + $tot_secs);
+  my $tot_time = _elapsed_str(time - $start_time);
     # Summary line.
   $pkg->printk('summary', '# Total ');
   $pkg->printk('success', "+$tot_nb_succ ");

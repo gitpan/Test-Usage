@@ -331,6 +331,9 @@ METHODS AND FUNCTIONS
         These options will be passed to the test() method, invoked for each
         tested file.
 
+    follow => 1 # Follow symlinks wehn looking for files.
+        This is hard-coded for now, it cannot change. FIXME
+
   $t->reset_options ()
     Resets all options to their default values.
 
