@@ -2,7 +2,6 @@ Changes
 Makefile.PL
 MANIFEST
 README
-Template_T.pm
 TODO
 t/Foo.pm
 t/Foo_T.pm
@@ -15,4 +14,5 @@ t/t3.t
 t/t4.t
 test
 lib/Test/Usage.pm
+lib/Test/Usage/Manual.pm
 META.yml                                 Module meta-data (added by MakeMaker)

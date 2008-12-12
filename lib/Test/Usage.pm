@@ -1,7 +1,7 @@
 package Test::Usage;
 
 use 5.008;
-our $VERSION = '0.07';
+our $VERSION = '0.07_50';
 
 =head1 NAME
 
@@ -9,69 +9,50 @@ Test::Usage - A different approach to testing: selective, quieter, colorful.
 
 =head1 SYNOPSIS
 
-Let's say we are building module Foo.pm. To exercise it, we write a
-usage examples module, Foo_T.pm, which may eventually look something
-like this:
+    package Foo_T;
+    use strict;
+    use warnings;
+    use Test::Usage;
+    use Foo;
 
-  package Foo_T;
-  use Test::Usage;
-  use strict;
-  use warnings;
-  use Foo;
+    example('e1', sub { ...  ok(...); ...  die "Uh oh"; ... });
+    example('a1', sub { ...  ok(...); ... });
+    example('a2', sub {
+        my $f = Foo->new();
+        my $got_foo = $f->foo();
+        my $exp_foo = 'FOO';
+        ok(
+            $got_foo eq $exp_foo,
+            "Expecting foo() to return '$exp_foo'.",
+            "But got '$got_foo'."
+        );
+    });
 
-  example('e1', sub { ...  ok(...); ...  die "Uh oh"; ... });
-  example('a1', sub { ...  ok(...) or diag(...); ... });
-  example('a2', sub { ...  ok(...); ... });
-  example('a3', sub {
-    my $f = Foo->new();
-    my $got_foo = $f->foo();
-    my $exp_foo = 'FOO';
-    ok(
-      $got_foo eq $exp_foo,
-      "Expecting foo() to return '$exp_foo'.",
-      "But got '$got_foo'."
-    );
-  });
+Then, from the command line:
 
-Here are a few ways to test its examples:
+        # Run all examples found in the test module, that is, e1, a1,
+        # and a2.
+    perl -MFoo_T -e test
 
-    # Run example 'a3' only.
-  perl -MFoo_T -e 'test(a => "a3")'
+        # Run all examples whose label matches glob 'a*': a1, a2.
+    perl -MFoo_T -e 'test(a => "a*")'
 
-    # Run all examples whose label matches glob 'a*': a1, a2, a3.
-  perl -MFoo_T -e 'test(a => "a*")'
+        # Run example 'a2', reporting successes also, but without color.
+    perl -MFoo_T -e 'test(a => "a2", v => 2, c => 0)'
 
-    # Run all examples found in the test module.
-  perl -MFoo_T -e test
-
-    # Run example 'a3', reporting successes also, but without color.
-  perl -MFoo_T -e 'test(a => "a3", v => 2, c => 0)'
-
-    # Run and summarize all examples in all "*_T.pm" files found under
-    # current directory.
-  perl -MTest::Usage -e files
-
-=head1 DESCRIPTION
-
-This module approaches testing differently from the standard Perl way.
-It is selective because it makes it possible to run only selected
-tests from a test file that may contain many more.  It is quieter
-because by default only failing tests are reported.  It is colorful
-because, if possible, results are displayed using color (with
-Term::ANSIColor or Win32::Console).
-
-I usually have a test file named *_T.pm for each ordinary *.pm file in
-my projects. For example, the test file for Foo.pm would be named
-Foo_T.pm. I place Foo_T.pm in the same directory as Foo.pm.  Foo_T.pm
-has a conventional structure, like the one shown in the SYNOPSIS.
-Basically, it just names the module, loads Test::Usage and defines a
-bunch of examples.  Each example(), identified by its label, adds to
-the tests that the module can run, upon request.
+        # Run and summarize all examples in all "*_T.pm" files found
+        # under current directory.
+    perl -MTest::Usage -e files
 
 The module exports some of its methods to the calling package and some
 to main, to make them easier to use, usually from the shell.  When the
 developer wishes to run a test, he invokes it as shown in the synopsis
 (perhaps with a coating of shell syntaxic sugar).
+
+Bleah. Under cygwin's screen, Win32Console fails, so do this before
+invoking screen:
+
+    export USE_ANSI_COLOR=1
 
 =cut
 
@@ -86,7 +67,7 @@ use File::Slurp;
 use File::Spec;
 use IO::File;
 
-  # Main accumulator.
+    # Main accumulator.
 my $t;
 
 # --------------------------------------------------------------------
@@ -94,53 +75,53 @@ my $t;
 
 my $gColor = {};
 
-  # Explicit initializations, for the maintainer's benefit.
+    # Explicit initializations, for the maintainer's benefit.
 $gColor->{id} = undef;
 $gColor->{palette} = undef;
-  # Will be set only for Win32::Console usage.
+    # Will be set only for Win32::Console usage.
 $gColor->{out} = undef;
 
-if ($^O eq 'MSWin32') {
-  eval "use Win32::Console";
-  if ($@ eq '') {
-    $gColor->{out} = Win32::Console->new(STD_OUTPUT_HANDLE())
-        or die "Couldn't get new Win32::Console instance.";
-    $gColor->{palette} = {
-      cBoldWhite    => $::FG_WHITE        | $::BG_BLACK,
-      cBoldMagenta  => $::FG_LIGHTMAGENTA | $::BG_BLACK,
-      cBoldCyan     => $::FG_LIGHTCYAN    | $::BG_BLACK,
-      cYellow       => $::FG_YELLOW       | $::BG_BLACK,
-      cBoldGreen    => $::FG_LIGHTGREEN   | $::BG_BLACK,
-      cBoldRed      => $::FG_LIGHTRED     | $::BG_BLACK,
-      cWhite        => $::FG_WHITE        | $::BG_BLACK,
-      cBlack        => $::FG_BLACK        | $::BG_BLACK,
-    };
-    $gColor->{id} = 'Win32Console';
-  }
+if (! defined($ENV{USE_ANSI_COLOR}) && $^O eq 'MSWin32') {
+    eval "use Win32::Console";
+    if ($@ eq '') {
+        $gColor->{out} = Win32::Console->new(STD_OUTPUT_HANDLE())
+          or die "Couldn't get new Win32::Console instance.";
+        $gColor->{palette} = {
+            cBoldWhite    => $Win32::Console::FG_WHITE        | $Win32::Console::BG_BLACK,
+            cBoldMagenta  => $Win32::Console::FG_LIGHTMAGENTA | $Win32::Console::BG_BLACK,
+            cBoldCyan     => $Win32::Console::FG_LIGHTCYAN    | $Win32::Console::BG_BLACK,
+            cYellow       => $Win32::Console::FG_YELLOW       | $Win32::Console::BG_BLACK,
+            cBoldGreen    => $Win32::Console::FG_LIGHTGREEN   | $Win32::Console::BG_BLACK,
+            cBoldRed      => $Win32::Console::FG_LIGHTRED     | $Win32::Console::BG_BLACK,
+            cWhite        => $Win32::Console::FG_WHITE        | $Win32::Console::BG_BLACK,
+            cBlack        => $Win32::Console::FG_BLACK        | $Win32::Console::BG_BLACK,
+        };
+        $gColor->{id} = 'Win32Console';
+    }
 }
 else {
-  eval "use Term::ANSIColor ()";
-  if ($@ eq '') {
-    $gColor->{palette} = {
-      cBoldWhite    => 'bold white',
-      cBoldMagenta  => 'bold magenta',
-      cBoldCyan     => 'bold cyan',
-      cYellow       => 'yellow',
-      cBoldGreen    => 'bold green',
-      cBoldRed      => 'bold red',
-      cWhite        => 'white',
-      cBlack        => 'black',
-    };
-    $gColor->{id} = 'ANSI';
-  }
+    eval "use Term::ANSIColor ()";
+    if ($@ eq '') {
+        $gColor->{palette} = {
+            cBoldWhite    => 'bold white',
+            cBoldMagenta  => 'bold magenta',
+            cBoldCyan     => 'bold cyan',
+            cYellow       => 'yellow',
+            cBoldGreen    => 'bold green',
+            cBoldRed      => 'bold red',
+            cWhite        => 'white',
+            cBlack        => 'black',
+        };
+        $gColor->{id} = 'ANSI';
+    }
 }
 
 # --------------------------------------------------------------------
 # Verbosity level constants.
 
-sub REPORT_NOTHING  () { 0 }
-sub REPORT_FAILURES () { 1 }
-sub REPORT_ALL      () { 2 }
+use constant REPORT_NOTHING  => 0;
+use constant REPORT_FAILURES => 1;
+use constant REPORT_ALL      => 2;
 
 # --------------------------------------------------------------------
 # Default options. Change if necessary.
@@ -149,47 +130,47 @@ sub REPORT_ALL      () { 2 }
 # they become keys to $t->{options}.
 
 my %_D;
-  # Can be set by test().
+    # Can be set by test().
 $_D{t} = {
-    # Accept tests whose label matches this glob.
-  a => '*',
-    # Exclude tests whose label matches this glob.
-  e => '__*',
-    # Print a summary line if true.
-  s => 1,
-    # Verbosity level.
-  v => REPORT_FAILURES,
-    # Fail tests systematically if true.
-  fail => 0,
+        # Accept tests whose label matches this glob.
+    a => '*',
+        # Exclude tests whose label matches this glob.
+    e => '__*',
+        # Print a summary line if true.
+    s => 1,
+        # Verbosity level.
+    v => REPORT_FAILURES,
+        # Fail tests systematically if true.
+    f => 0,
 };
-  # Can be set by files().
+    # Can be set by files().
 $_D{f} = {
-    # Directory in which to look for files.
-  d => '.',
-    # Test files whose name matches this glob.
-  g => '*_T.pm',
-    # Look for files recursively through dir if true.
-  r => 1,
-    # Add to Perl %INC path.
-  i => '',
-    # Option values to pass to test() for each file.
-  t => {},
+        # Directory in which to look for files.
+    d => '.',
+        # Test files whose name matches this glob.
+    g => '*_T.pm',
+        # Look for files recursively through dir if true.
+    r => 1,
+        # Add to Perl %INC path.
+    i => '',
+        # Option values to pass to test() for each file.
+    t => {},
 };
-  # Miscellaneous. Can be set by test() or files().
+    # Miscellaneous. Can be set by test() or files().
 $_D{m} = {
-    # Use color if possible.
-  c => 1,
+        # Use color if possible.
+    c => 1,
 };
-  # Color map.
+    # Color map.
 $_D{c} = {
-  what    => 'cBoldWhite',
-  died    => 'cBoldMagenta',
-  warned  => 'cBoldCyan',
-  summary => 'cYellow',
-  success => 'cBoldGreen',
-  failure => 'cBoldRed',
-  diag    => 'cBoldRed',
-  default => 'cWhite',
+    what    => 'cBoldWhite',
+    died    => 'cBoldMagenta',
+    warned  => 'cBoldCyan',
+    summary => 'cYellow',
+    success => 'cBoldGreen',
+    failure => 'cBoldRed',
+    diag    => 'cBoldRed',
+    default => 'cWhite',
 };
 
 # --------------------------------------------------------------------
@@ -211,88 +192,89 @@ Sets $t to an empty hash ref, blessed in Test::Usage.
 
 Resets $t's counters to 0:
 
-  Number of 'ok' that failed.
-  Number of 'ok' that succeeded.
-  Number of examples that died.
-  Number of examples that had warnings.
+    Number of 'ok' that failed.
+    Number of 'ok' that succeeded.
+    Number of examples that died.
+    Number of examples that had warnings.
 
 Sets $t's default label to '-'.
 
 Resets $t's options to default values. Here are the as-shipped
 values:
 
-  For the test() method:
+    For the test() method:
 
-    a => '*'             # Accept tests whose label matches this glob.
-    e => '__*'           # Exclude tests whose label matches this glob.
-    s => 1               # Print a summary line if true.
-    v => REPORT_FAILURES # Verbosity level.
-    fail => 0            # Fail tests systematically if true.
+        a => '*'             # Accept tests whose label matches this glob.
+        e => '__*'           # Exclude tests whose label matches this glob.
+        s => 1               # Print a summary line if true.
+        v => REPORT_FAILURES # Verbosity level.
+        f => 0               # Fail tests systematically if true.
 
-  For the files() method:
+    For the files() method:
 
-    d => '.'      # Directory in which to look for files.
-    g => '*_T.pm' # Test files whose name matches this glob.
-    r => 1        # Look for files recursively through dir if true.
-    i => ''       # Add to Perl %INC path.
-    t => {}       # Option values to pass to test() for each file.
+        d => '.'      # Directory in which to look for files.
+        g => '*_T.pm' # Test files whose name matches this glob.
+        r => 1        # Look for files recursively through dir if true.
+        i => ''       # Add to Perl %INC path.
+        t => {}       # Option values to pass to test() for each file.
 
-  For both test() and files():
+    For both test() and files():
 
-    c => 1  # Use color if possible.
+        c => 1  # Use color if possible.
 
 Exports these methods to the calling package:
 
-  t
-  example
-  ok
-  ok_labeled
-  diag
+    t
+    example
+    ok
+    ok_labeled
+    diag
 
 Exports these methods to main:
 
-  t
-  test
-  files
-  labels
+    t
+    test
+    files
+    labels
+    plabels
 
 =cut
 
 sub import {
-  $t = bless {}, __PACKAGE__;
-  my $caller = caller;
-  $t->{name} = $caller;
-    # example() will push elements like [$label, $sub_ref]
-    # onto this array ref.
-  $t->{examples}  = [];
-    # Default label.
-  $t->{label}     = '-';
-    # Private counters.
-  $t->{nb_succ}   = 0;
-  $t->{nb_fail}   = 0;
-    # Incremented respectively when a die or a warning occur within an
-    # example().
-  $t->{died}      = 0;
-  $t->{warned}    = 0;
+    $t = bless {}, __PACKAGE__;
+    my $caller = caller;
+    $t->{name} = $caller;
+        # example() will push elements like [$label, $sub_ref]
+        # onto this array ref.
+    $t->{examples}  = [];
+        # Default label.
+    $t->{label}     = '-';
+        # Private counters.
+    $t->{nb_succ}   = 0;
+    $t->{nb_fail}   = 0;
+        # Incremented respectively when a die or a warning occur within an
+        # example().
+    $t->{died}      = 0;
+    $t->{warned}    = 0;
 
-  reset_options();
+    reset_options();
 
-  eval << "EOT";
-    package $caller;
-    *t          = sub { \$t };
-    *example    = sub { \$t->example(\@_) };
-    *ok         = sub { \$t->ok(\@_) };
-    *ok_labeled = sub { \$t->ok_labeled(\@_) };
-    *diag       = sub { \$t->diag(\@_) };
+    eval << "EOT";
+        package $caller;
+        *t          = sub { \$t };
+        *example    = sub { \$t->example(\@_) };
+        *ok         = sub { \$t->ok(\@_) };
+        *ok_labeled = sub { \$t->ok_labeled(\@_) };
+        *diag       = sub { \$t->diag(\@_) };
 EOT
-  eval "*main::t = sub { \$t }" unless $caller eq 'main';
-  eval << "EOT";
-    package main;
-    *test           = sub { \$t->test(\@_) };
-    *files          = sub { \$t->files(\@_) };
-    *labels         = sub { \$t->labels(\@_) };
+    eval "*main::t = sub { \$t }" unless $caller eq 'main';
+    eval << "EOT";
+        package main;
+        *test           = sub { \$t->test(\@_) };
+        *files          = sub { \$t->files(\@_) };
+        *labels         = sub { \$t->labels(\@_) };
+        *plabels        = sub { \$t->plabels(\@_) };
 EOT
- # }
 }
 
 # --------------------------------------------------------------------
@@ -322,24 +304,24 @@ scaffolding to express the intended usage.
 
 Here's a full example:
 
-  example('t1', sub {
-    my $f = Foo->new();
-    my $exp = 1;
-    my $got = $f->get_val();
-    ok(
-      $got == $exp,
-      "Expected get_val() to return $exp for a new Foo object.",
-      "But got $got.",
-    );
-  });
+    example('t1', sub {
+        my $f = Foo->new();
+        my $exp = 1;
+        my $got = $f->get_val();
+        ok(
+            $got == $exp,
+            "Expected get_val() to return $exp for a new Foo object.",
+            "But got $got.",
+        );
+    });
 
 =cut
 
 sub example {
-  my ($self, $label, $sub_ref) = @_;
-    # We store test examples in an array to guarantee that they will
-    # be executed in the order they appear in the test file.
-  push @{$self->{examples}},
+    my ($self, $label, $sub_ref) = @_;
+        # We store test examples in an array to guarantee that they will
+        # be executed in the order they appear in the test file.
+    push @{$self->{examples}},
       Test::Usage::Example->new($label, $sub_ref);
 }
 
@@ -356,10 +338,10 @@ Note that $bool will be evaluated in list context; for example, if you
 want to use a bind operator here, make sure you wrap it with 'scalar'.
 For example:
 
-  ok(scalar($x =~ /abc/),
-    "Expected \$x to match /abc/.",
-    "But its value was '$x'."
-  );
+    ok(scalar($x =~ /abc/),
+        "Expected \$x to match /abc/.",
+        "But its value was '$x'."
+    );
 
 In that example, if 'scalar' is not used, the bind operator is
 evaluated in list context, and if there is no match, an empty list is
@@ -368,61 +350,18 @@ returned, which results in ok() receiving only the last two arguments.
 If the test() flags are such that the result of the ok() is to be
 printed, something like one of the following will be printed:
 
-  ok a1
-    # Expected $x to match /abc/.
+    ok a1
+        # Expected $x to match /abc/.
 
-  not ok a1
-    # Expected $x to match /abc/.
-    # But its value was 'def'.
-
-ok() is most useful when it describes expected result and helps debug
-when it fails. So the $exp_msg should tell the user what the test is
-expecting, and the $got_msg, what it got instead.  It is useful to
-formulate them in terms that are useful for development, maintenance,
-and debugging.  Compare the following examples:
-
-=over 4
-
-=item Useful
-
-  ok(! defined($got = foo()),
-    'foo() should return undef if no arguments are given.',
-    "But returned '$got' instead."
-  );
-
-Whether it succeeds of fails, the following messages are helpful:
-
-  ok a1
-    # foo() should return undef if no arguments are given.
-
-  not ok a1
-    # foo() should return undef if no arguments are given.
-    # But returned '' instead.
-
-=item Useless
-
-  ok(! defined(my $got = foo()),
-    'Result is undefined.',
-    'Didn\'t work.'
-  );
-
-Whether it succeeds of fails, we don't really know what exactly went
-right, or wrong:
-
-  ok a1
-    # Result is undefined.
-
-  not ok a1
-    # Result is undefined.
-    # Didn't work.
-
-=back
+    not ok a1
+        # Expected $x to match /abc/.
+        # But its value was 'def'.
 
 =cut
 
 sub ok {
-  my ($self, $bool, $exp_msg, $got_msg) = @_;
-  $self->_confirm($self->{label}, $bool, $exp_msg, $got_msg);
+    my ($self, $bool, $exp_msg, $got_msg) = @_;
+    $self->_confirm($self->{label}, $bool, $exp_msg, $got_msg);
 }
 
 # --------------------------------------------------------------------
@@ -436,46 +375,47 @@ whose labels we want to distinguish.
 =cut
 
 sub ok_labeled {
-  my ($self, $sub_label, $bool, $exp_msg, $got_msg) = @_;
-  $self->_confirm(
-      $self->{label} . '.' . $sub_label,
-      $bool, $exp_msg, $got_msg);
+    my ($self, $sub_label, $bool, $exp_msg, $got_msg) = @_;
+    $self->_confirm(
+        $self->{label} . '.' . $sub_label,
+        $bool, $exp_msg, $got_msg
+    );
 }
 
 # --------------------------------------------------------------------
 
-=begin maint $self->_confirm ($label, $bool, $exp_msg, $got_msg)
+=begin maintenance $self->_confirm ($label, $bool, $exp_msg, $got_msg)
 
 Returns true if argument $bool is true, false otherwise. Also returns
 false if the 'fail' option is set.
 
-=end maint
+=end maintenance
 
 =cut
 
 sub _confirm {
-  my ($self, $label, $bool, $exp_msg, $got_msg) = @_;
-  $bool = 0 if $self->options()->{fail};
-  ($bool && ++$self->{nb_succ}) || ++$self->{nb_fail};
-  my $verbosity = $self->options()->{v};
-  $exp_msg = '' unless defined $exp_msg;
-  $got_msg = '' unless defined $got_msg;
-  if ($verbosity == REPORT_ALL || ($verbosity == REPORT_FAILURES && ! $bool)) {
-    $self->printk('what', $bool ? 'ok ' : 'not ok ');
-    my $printk_type = $bool ? 'success' : 'failure';
-    $self->printk($printk_type, "$label\n");
-    if ($exp_msg ne '') {
-      $exp_msg =~ s/^/  # /gm;
-      $exp_msg =~ s/\n*$/\n/;
-      $self->printk($printk_type, $exp_msg);
+    my ($self, $label, $bool, $exp_msg, $got_msg) = @_;
+    $bool = 0 if $self->options()->{f};
+    ($bool && ++$self->{nb_succ}) || ++$self->{nb_fail};
+    my $verbosity = $self->options()->{v};
+    $exp_msg = '' unless defined $exp_msg;
+    $got_msg = '' unless defined $got_msg;
+    if ($verbosity == REPORT_ALL || ($verbosity == REPORT_FAILURES && ! $bool)) {
+        $self->printk('what', $bool ? 'ok ' : 'not ok ');
+        my $printk_type = $bool ? 'success' : 'failure';
+        $self->printk($printk_type, "$label\n");
+        if ($exp_msg ne '') {
+            $exp_msg =~ s/^/  # /gm;
+            $exp_msg =~ s/\n*$/\n/;
+            $self->printk($printk_type, $exp_msg);
+        }
+        if (! $bool && $got_msg ne '') {
+            $got_msg =~ s/^/  # /gm;
+            $got_msg =~ s/\n*$/\n/;
+            $self->printk($printk_type, $got_msg);
+        }
     }
-    if (! $bool && $got_msg ne '') {
-      $got_msg =~ s/^/  # /gm;
-      $got_msg =~ s/\n*$/\n/;
-      $self->printk($printk_type, $got_msg);
-    }
-  }
-  return $bool;
+    return $bool;
 }
 
 # --------------------------------------------------------------------
@@ -489,17 +429,17 @@ Test::Builder, Test::More, et al.).
 =cut
 
 sub diag {
-  my($self, @msgs) = @_;
-  return unless @msgs && $self->options()->{v} > 0;
-    # Prefix each line to make it a comment, to avoid interference
-    # when used with Test::Harness.
-  foreach (@msgs) {
-    $_ = 'undef' unless defined;
-    s/^/  # /gm;
-  }
-  push @msgs, "\n" unless $msgs[-1] =~ /\n\Z/;
-  $self->printk('diag', "@msgs");
-  return 1;
+    my($self, @msgs) = @_;
+    return unless @msgs && $self->options()->{v} > 0;
+        # Prefix each line to make it a comment, to avoid interference
+        # when used with Test::Harness.
+    foreach (@msgs) {
+        $_ = 'undef' unless defined;
+        s/^/  # /gm;
+    }
+    push @msgs, "\n" unless $msgs[-1] =~ /\n\Z/;
+    $self->printk('diag', "@msgs");
+    return 1;
 }
 
 # --------------------------------------------------------------------
@@ -512,7 +452,19 @@ the order they were defined.
 =cut
 
 sub labels {
-  [map {$_->{label}} @{$_[0]->{examples}}];
+    [map {$_->{label}} @{$_[0]->{examples}}];
+}
+
+# --------------------------------------------------------------------
+
+=head2 ::plabels ()
+
+Prints space separated known labels to STDOUT.
+
+=cut
+
+sub plabels {
+    print STDOUT join ' ', @{::labels()};
 }
 
 # --------------------------------------------------------------------
@@ -525,12 +477,12 @@ some of its keys are missing, default values apply.
 
 Returns a list containing the following values:
 
-  Name of the module being tested.
-  Number of seconds it took to run the examples.
-  Number of 'ok' that succeeded.
-  Number of 'ok' that failed.
-  Number of examples that died.
-  Number of examples that had warnings.
+    Name of the module being tested.
+    Number of seconds it took to run the examples.
+    Number of 'ok' that succeeded.
+    Number of 'ok' that failed.
+    Number of examples that died.
+    Number of examples that had warnings.
 
 Here is the meaning and default value of the elements of %options:
 
@@ -554,23 +506,23 @@ prefix from the label, or pass the 'e => ""' argument.
 
 Determines the verbosity of the testing mechanism:
 
-  0: Display no individual results.
-  1: Display individual results for failing tests only.
-  2: Display individual results for all tests.
+    0: Display no individual results.
+    1: Display individual results for failing tests only.
+    2: Display individual results for all tests.
 
 =item s => 1  # Summary.
 
 If true, two lines like the following will wrap the test output:
 
-  # module_name
-    ...
-    # +3 -1 -d +w (00h:00m:02s) module_name
+    # module_name
+        ...
+        # +3 -1 -d +w (00h:00m:02s) module_name
 
 That means that of the ok*() calls that were made, 3 succeeded and 1
 failed, that no dies but some warnings occurred, and it took about 2
 seconds to run.
 
-=item fail => 0  # Fail.
+=item f => 0  # Fail.
 
 If true, any ok*() invoked will act as though it failed. When combined
 with a verbosity of 1 or 2, (to display failures), you will see all
@@ -581,100 +533,100 @@ the actual messages that would get printed when failures occur.
 =cut
 
 {
-  my $tee_hdl;
+    my $tee_hdl;
 
-  sub _tee_to {
-    my ($self, $file_name) = @_;
-    $tee_hdl = IO::File->new($file_name, O_WRONLY|O_APPEND)
-        or die "Couldn't write to '$file_name'.";
-  }
+    sub _tee_to {
+        my ($self, $file_name) = @_;
+        $tee_hdl = IO::File->new($file_name, O_WRONLY|O_APPEND)
+          or die "Couldn't write to '$file_name'.";
+    }
 
-  sub test {
-    my ($self, %options) = @_;
-    $self->{nb_succ}  = 0;
-    $self->{nb_fail}  = 0;
-    $self->{died}     = 0;
-    $self->{warned}   = 0;
-      # Run examples matching this glob.
-    my $accept = glob_to_regex(
-      defined($options{a})
-        ? $options{a}
-        : $self->{options}{a}
-    );
-      # Don't run examples matching this glob.
-    my $exclude = glob_to_regex(
-      defined($options{e})
-        ? $options{e}
-        : $self->{options}{e}
-    );
-    $self->{options}{c} = $options{c} if defined $options{c};
-    $self->{options}{v} = _adjust_verbosity($options{v}) if defined $options{v};
-    $self->{options}{fail} = $options{fail} if defined $options{fail};
-    my $start_time = time;
-      # Run the examples.
-    $self->printk('summary', '# ' . $self->{name} . "\n");
-    for my $example (@{$self->{examples}}) {
-      my $label   = $example->{label};
-      my $sub_ref = $example->{sub_ref};
-      next unless $label =~ /$accept/;
-      next if $label =~ /$exclude/;
-      $self->{label} = $label;
-      my $warnings = '';
-      eval {
-        local $SIG{__DIE__} = sub {
-          Carp::confess();
-        };
-        local $SIG{__WARN__} = sub {
-          $DB::single = 1;
-          $warnings .= Carp::longmess(@_) . "\n";
-        };
-        $sub_ref->($self);
-      };
-      if ($warnings) {
-        $self->printk('keyword', 'WARNED ');
-        $self->printk('warned', $warnings);
-        ++$self->{warned};
-      }
-      if ($@) {
-        $self->printk('keyword', 'DIED ');
-        $self->printk('died', $@);
-        ++$self->{died};
-      }
+    sub test {
+        my ($self, %options) = @_;
+        $self->{nb_succ}  = 0;
+        $self->{nb_fail}  = 0;
+        $self->{died}     = 0;
+        $self->{warned}   = 0;
+            # Run examples matching this glob.
+        my $accept = glob_to_regex(
+            defined($options{a})
+                ? $options{a}
+                : $self->{options}{a}
+        );
+            # Don't run examples matching this glob.
+        my $exclude = glob_to_regex(
+            defined($options{e})
+                ? $options{e}
+                : $self->{options}{e}
+        );
+        $self->{options}{c} = $options{c} if defined $options{c};
+        $self->{options}{v} = _adjust_verbosity($options{v}) if defined $options{v};
+        $self->{options}{f} = $options{f} if defined $options{f};
+        my $start_time = time;
+            # Run the examples.
+        $self->printk('summary', '# ' . $self->{name} . "\n");
+        for my $example (@{$self->{examples}}) {
+            my $label   = $example->{label};
+            my $sub_ref = $example->{sub_ref};
+            next unless $label =~ /$accept/;
+            next if $label =~ /$exclude/;
+            $self->{label} = $label;
+            my $warnings = '';
+            eval {
+                local $SIG{__DIE__} = sub {
+                    Carp::confess();
+                };
+                local $SIG{__WARN__} = sub {
+                    $DB::single = 1;
+                    $warnings .= Carp::longmess(@_) . "\n";
+                };
+                $sub_ref->($self);
+            };
+            if ($warnings) {
+                $self->printk('keyword', 'WARNED ');
+                $self->printk('warned', $warnings);
+                ++$self->{warned};
+            }
+            if ($@) {
+                $self->printk('keyword', 'DIED ');
+                $self->printk('died', $@);
+                ++$self->{died};
+            }
+        }
+        my $time_took = time - $start_time;
+        my $summary = join(' ',
+            $self->sprintk('summary', '  #'),
+            $self->sprintk('success', '+' . $self->{nb_succ}),
+            $self->sprintk('failure', '-' . $self->{nb_fail}),
+            $self->sprintk('died',    ($self->{died} ? '+' : '-') . 'd'),
+            $self->sprintk('warned',  ($self->{warned} ? '+' : '-') . 'w'),
+            $self->sprintk('summary', '(' .  _elapsed_str($time_took) . ') '),
+            $self->sprintk('summary', $self->{name}),
+        ) . "\n";
+        if ($tee_hdl) {
+            print $tee_hdl 
+                ' nb_succ ',   $self->{nb_succ},
+                ' nb_fail ',   $self->{nb_fail},
+                ' died ',      $self->{died},
+                ' warned ',    $self->{warned},
+                ' time_took ', _elapsed_str($time_took),
+                "\n"
+            ;
+        }
+        if (defined($options{s}) ? $options{s} : $self->{options}{s}) {
+            print $summary;
+           # $self->printk('summary', $summary);
+        }
+        $self->reset_options();
+        return
+            $self->{name},
+            $time_took,
+            $self->{nb_succ},
+            $self->{nb_fail},
+            $self->{died},
+            $self->{warned},
+        ;
     }
-    my $time_took = time - $start_time;
-    my $summary = join(' ',
-      $self->sprintk('summary', '  #'),
-      $self->sprintk('success', '+' . $self->{nb_succ}),
-      $self->sprintk('failure', '-' . $self->{nb_fail}),
-      $self->sprintk('died',    ($self->{died} ? '+' : '-') . 'd'),
-      $self->sprintk('warned',  ($self->{warned} ? '+' : '-') . 'w'),
-      $self->sprintk('summary', '(' .  _elapsed_str($time_took) . ') '),
-      $self->sprintk('summary', $self->{name}),
-    ) . "\n";
-    if ($tee_hdl) {
-      print $tee_hdl 
-      ' nb_succ ',   $self->{nb_succ},
-      ' nb_fail ',   $self->{nb_fail},
-      ' died ',      $self->{died},
-      ' warned ',    $self->{warned},
-      ' time_took ', _elapsed_str($time_took),
-      "\n"
-    }
-    if (defined($options{s}) ? $options{s} : $self->{options}{s}) {
-      print $summary;
-     # $self->printk('summary', $summary);
-    }
-    $self->reset_options();
-    return
-      $self->{name},
-      $time_took,
-      $self->{nb_succ},
-      $self->{nb_fail},
-      $self->{died},
-      $self->{warned},
-    ;
-  }
-
 }
 
 # --------------------------------------------------------------------
@@ -690,17 +642,17 @@ calls perl in a subshell to run something like this:
 The results of each run are collected, examined and tallied, and a
 summary line and a '1..n' line are displayed, something like this:
 
-  # Total +7 -5 0d 1w (00h:00m:00s) in 4 modules
-  1..12
+    # Total +7 -5 0d 1w (00h:00m:00s) in 4 modules
+    1..12
 
 Returns a list of:
 
-  Number of seconds it took to run the examples.
-  Number of 'ok' that succeeded.
-  Number of 'ok' that failed.
-  Number of examples that died.
-  Number of examples that had warnings.
-  Number of modules that were run.
+    Number of seconds it took to run the examples.
+    Number of 'ok' that succeeded.
+    Number of 'ok' that failed.
+    Number of examples that died.
+    Number of examples that had warnings.
+    Number of modules that were run.
 
 All values in %options are optional. Their meaning and default value
 are as follows:
@@ -735,7 +687,7 @@ added in the order of the sorted 'i*' keys.
 These options will be passed to the test() method, invoked for each
 tested file.
 
-=item follow => 1 # Follow symlinks wehn looking for files.
+=item follow => 1 # Follow symlinks when looking for files.
 
 This is hard-coded for now, it cannot change. FIXME
 
@@ -744,160 +696,161 @@ This is hard-coded for now, it cannot change. FIXME
 =cut
 
 sub files {
-  my ($pkg, %options) = @_;
-  defined($options{$_}) || ($options{$_} = $_D{f}{$_})
+    my ($pkg, %options) = @_;
+    defined($options{$_}) || ($options{$_} = $_D{f}{$_})
       for qw(g r t);
-  $pkg->{options}{c} = defined($options{c}) ? $options{c} : $_D{m}{c};
-  $options{d} = $_D{f}{d}
+    $pkg->{options}{c} = defined($options{c}) ? $options{c} : $_D{m}{c};
+    $options{d} = $_D{f}{d}
       unless grep substr($_, 0, 1) eq 'd', keys %options;
-  my @dirs = map File::Spec->rel2abs($options{$_}),
+    my @dirs = map File::Spec->rel2abs($options{$_}),
       grep substr($_, 0, 1) eq 'd', keys %options;
-    # Make the options to pass to test() into a string.
-  my $t_options = join ', ', map {
-    "$_ => '$options{t}{$_}'"
-  } keys %{$options{t}};
-    # Use the user supplied -i* options and the current contents of
-    # @INC as the include path (-I) to the perl we will call.
-  my $libs = '';
-  $libs = join ' ',
-      map(qq|"-I$options{$_}"|,
+        # Make the options to pass to test() into a string.
+    my $t_options = join ', ', map {
+        "$_ => '$options{t}{$_}'"
+    } keys %{$options{t}};
+        # Use the user supplied -i* options and the current contents of
+        # @INC as the include path (-I) to the perl we will call.
+    my $libs = '';
+    $libs = join ' ',
+        map(qq|"-I$options{$_}"|,
           grep substr($_, 0, 1) eq 'i', sort keys %options),
-      map(qq|"-I$_"|, @INC);
-  my $tot_nb_succ = 0;
-  my $tot_nb_fail = 0;
-  my $tot_died   = 0;
-  my $tot_warned = 0;
-  my $tot_hrs  = 0;
-  my $tot_mins = 0;
-  my $tot_secs = 0;
-  my $nb_modules = 0;
-  my @found_modules;
-  my $wanted = sub {
-    my $dir = $File::Find::dir;
-    my $file = $_;
-    my $spec = "$dir/$file";
-    return if -d $spec;
-    return unless matches_glob($spec, $options{g});
-    my $module = extract_module_name($spec);
-    return unless defined $module;
-    push @found_modules, $module;
-  };
-  find({wanted => $wanted, follow => 1}, $_) for @dirs;
-  my $start_time = time;
-  for my $module (sort @found_modules) {
-    my (undef, $file_name) = tempfile(UNLINK => 1);
-      # Try to make quotes OS-neutral.
-    my $prog = qq{$^X $libs -w -e "use $module; }
-        . qq{t()->_tee_to(q[$file_name]); test($t_options)"};
-    system "$prog";
-    my $result = read_file($file_name);
-    my ($nb_succ, $nb_fail, $died, $warned,
-        $hrs, $mins, $secs)
-        = $result =~ /
-      nb_succ   \s+ (\S+) \s+
-      nb_fail   \s+ (\S+) \s+
-      died      \s+ (\S+) \s+
-      warned    \s+ (\S+) \s+
-      time_took \s+ (..)h:(..)m:(..)
+        map(qq|"-I$_"|, @INC);
+    my $tot_nb_succ = 0;
+    my $tot_nb_fail = 0;
+    my $tot_died   = 0;
+    my $tot_warned = 0;
+    my $tot_hrs  = 0;
+    my $tot_mins = 0;
+    my $tot_secs = 0;
+    my $nb_modules = 0;
+    my @found_modules;
+    my $wanted = sub {
+        my $dir = $File::Find::dir;
+        my $file = $_;
+        my $spec = "$dir/$file";
+        return if -d $spec;
+        return unless matches_glob($spec, $options{g});
+        my $module = extract_module_name($spec);
+        return unless defined $module;
+        push @found_modules, $module;
+    };
+    find({wanted => $wanted, follow => 1}, $_) for @dirs;
+    my $start_time = time;
+    for my $module (sort @found_modules) {
+        my (undef, $file_name) = tempfile(UNLINK => 1);
+            # Try to make quotes OS-neutral.
+        my $prog = qq{$^X $libs -w -e "use $module; }
+          . qq{t()->_tee_to(q[$file_name]); test($t_options)"};
+        system "$prog";
+        my $result = read_file($file_name);
+        my ($nb_succ, $nb_fail, $died, $warned, $hrs, $mins, $secs)
+          = $result =~ /
+            nb_succ   \s+ (\S+) \s+
+            nb_fail   \s+ (\S+) \s+
+            died      \s+ (\S+) \s+
+            warned    \s+ (\S+) \s+
+            time_took \s+ (..)h:(..)m:(..)
         /x;
-    $tot_nb_succ += $nb_succ || 0;
-    $tot_nb_fail += $nb_fail || 0;
-    $tot_died    += $died    || 0;
-    $tot_warned  += $warned  || 0;
-    $tot_hrs  += $hrs || 0;
-    $tot_mins += $mins || 0;
-    $tot_secs += $secs || 0;
-    ++$nb_modules;
-  };
-  my $tot_time = _elapsed_str(time - $start_time);
-    # Summary line.
-  $pkg->printk('summary', '# Total ');
-  $pkg->printk('success', "+$tot_nb_succ ");
-  $pkg->printk('failure', "-$tot_nb_fail ");
-  $pkg->printk('died',    "${tot_died}d ");
-  $pkg->printk('warned',  "${tot_warned}w ");
-  $pkg->printk('summary', "($tot_time) ");
-  $pkg->printk('summary', "in $nb_modules modules.\n");
-    # '1..n' line.
-  $pkg->printk('summary', sprintf "1..%d\n", $tot_nb_succ + $tot_nb_fail);
-  return
-    $tot_time,
-    $tot_nb_succ,
-    $tot_nb_fail,
-    $tot_died,
-    $tot_warned,
-    $nb_modules,
-  ;
+        $tot_nb_succ += $nb_succ || 0;
+        $tot_nb_fail += $nb_fail || 0;
+        $tot_died    += $died    || 0;
+        $tot_warned  += $warned  || 0;
+        $tot_hrs  += $hrs || 0;
+        $tot_mins += $mins || 0;
+        $tot_secs += $secs || 0;
+        ++$nb_modules;
+    };
+    my $tot_time = _elapsed_str(time - $start_time);
+        # Summary line.
+    $pkg->printk('summary', '# Total ');
+    $pkg->printk('success', "+$tot_nb_succ ");
+    $pkg->printk('failure', "-$tot_nb_fail ");
+    $pkg->printk('died',    "${tot_died}d ");
+    $pkg->printk('warned',  "${tot_warned}w ");
+    $pkg->printk('summary', "($tot_time) ");
+    $pkg->printk('summary', "in $nb_modules modules.\n");
+        # '1..n' line.
+    $pkg->printk('summary', sprintf "1..%d\n", $tot_nb_succ + $tot_nb_fail);
+    return
+        $tot_time,
+        $tot_nb_succ,
+        $tot_nb_fail,
+        $tot_died,
+        $tot_warned,
+        $nb_modules,
+    ;
 }
 
 # --------------------------------------------------------------------
 sub glob_to_regex {
-  my $glob = shift;
-  $glob =~ s/\./\\./g;
-  $glob =~ s/\*/\.*/g;
-  $glob =~ s/\?/./g;
-      # Insert anchors for start and end of string.
-  $glob =~ s/^/\^/g;
-  $glob =~ s/$/\$/g;
-  return $glob;
+    my $glob = shift;
+    $glob =~ s/\./\\./g;
+    $glob =~ s/\*/\.*/g;
+    $glob =~ s/\?/./g;
+        # Insert anchors for start and end of string.
+    $glob =~ s/^/\^/g;
+    $glob =~ s/$/\$/g;
+    return $glob;
 }
 
 # --------------------------------------------------------------------
 sub _adjust_verbosity {
-  my $val = shift;
-  return ($val =~ /^(0|1|2)$/) ? $val : REPORT_FAILURES;
+    my $val = shift;
+    return ($val =~ /^(0|1|2)$/) ? $val : REPORT_FAILURES;
 }
 
 # --------------------------------------------------------------------
 
-=begin maint $t->sprintk ($color_tag, $text)
+=begin maintenance $t->sprintk ($color_tag, $text)
 
 $color_tag, which will map into the color table, is one of:
 
-  what
-  died
-  warned
-  summary
-  success
-  failure
-  diag
-  default
+    what
+    died
+    warned
+    summary
+    success
+    failure
+    diag
+    default
 
-=end maint
+=end maintenance
 
 =cut
 
 sub sprintk {
-  my ($self, $color_tag, $text) = @_;
-  return $text unless $gColor->{id} && $self->{options}{c};
-  my $raw_color = $_D{c}{$color_tag} || $_D{c}{default};
-  my $cooked_color = $gColor->{palette}{$raw_color};
-  my $ret_str = '';
-  if ($gColor->{id} eq 'Win32Console') {
-    $gColor->{out}->Attr($cooked_color);
-    $gColor->{out}->Write($&) while $text =~ /.{1,1000}/gs;
-    $gColor->{out}->Attr($::FG_GRAY | $::BG_BLACK);
-  }
-  elsif ($gColor->{id} eq 'ANSI') {
-    $ret_str .= Term::ANSIColor::color($cooked_color);
-      # Make sure the color reset command is part of the last line
-      # (simplifies testing).
-    my $chomped = chomp $text;
-    $ret_str .= $text;
-    $ret_str .= Term::ANSIColor::color('reset');
-    $ret_str .= "\n" if $chomped;
-  }
-    # Unknown color id.
-  else {
-    $ret_str .= $text;
-  }
-  return $ret_str;
+    my ($self, $color_tag, $text) = @_;
+    return $text unless $gColor->{id} && $self->{options}{c};
+    my $raw_color = $_D{c}{$color_tag} || $_D{c}{default};
+    my $cooked_color = $gColor->{palette}{$raw_color};
+    my $ret_str = '';
+    if ($gColor->{id} eq 'Win32Console') {
+        my $save_color = $gColor->{out}->Attr();
+        $gColor->{out}->Attr($cooked_color);
+        $gColor->{out}->Write($&) while $text =~ /.{1,1000}/gs;
+       # $gColor->{out}->Attr($Win32::Console::FG_GRAY | $Win32::Console::BG_BLACK);
+        $gColor->{out}->Attr($save_color);
+    }
+    elsif ($gColor->{id} eq 'ANSI') {
+        $ret_str .= Term::ANSIColor::color($cooked_color);
+            # Make sure the color reset command is part of the last line
+            # (simplifies testing).
+        my $chomped = chomp $text;
+        $ret_str .= $text;
+        $ret_str .= Term::ANSIColor::color('reset');
+        $ret_str .= "\n" if $chomped;
+    }
+        # Unknown color id.
+    else {
+        $ret_str .= $text;
+    }
+    return $ret_str;
 }
 
 # --------------------------------------------------------------------
 sub printk {
-  my ($self, $color_tag, $text) = @_;
-  print $self->sprintk($color_tag, $text);
+    my ($self, $color_tag, $text) = @_;
+    print $self->sprintk($color_tag, $text);
 }
 
 # --------------------------------------------------------------------
@@ -909,9 +862,9 @@ Resets all options to their default values.
 =cut
 
 sub reset_options {
-  for my $what (qw(t f m c)) {
-    $t->{options}{$_} = $_D{$what}{$_} for keys %{$_D{$what}};
-  }
+    for my $what (qw(t f m c)) {
+        $t->{options}{$_} = $_D{$what}{$_} for keys %{$_D{$what}};
+    }
 }
 
 # --------------------------------------------------------------------
@@ -926,49 +879,49 @@ sub options { $t->{options} }
 
 # --------------------------------------------------------------------
 
-=begin maint $pkg::_elapsed_str ($seconds)
+=begin maintenance $pkg::_elapsed_str ($seconds)
 
 Returns a string like '00:00:05' representing a duration of $seconds
 as a 'hours:minutes:seconds' equivalent.
 
-=end maint
+=end maintenance
 
 =cut
 
 sub _elapsed_str {
-  my $seconds = shift;
-  my $hr = int($seconds / 3600);
-  $seconds -= $hr * 3600;
-  my $mi = int($seconds / 60);
-  my $se = $seconds - $mi * 60;
-  sprintf "%02dh:%02dm:%02ds", $hr, $mi, $se;
+    my $seconds = shift;
+    my $hr = int($seconds / 3600);
+    $seconds -= $hr * 3600;
+    my $mi = int($seconds / 60);
+    my $se = $seconds - $mi * 60;
+    sprintf "%02dh:%02dm:%02ds", $hr, $mi, $se;
 }
 
 # --------------------------------------------------------------------
 sub extract_module_name {
-  my $spec = shift;
-    # Extract the module name from the file.
-  my $contents = read_file($spec);
-  my ($module) = $contents =~ /^\s*package\s+(\S+);/m;
-  return $module;
+    my $spec = shift;
+        # Extract the module name from the file.
+    my $contents = read_file($spec);
+    my ($module) = $contents =~ /^\s*package\s+(\S+);/m;
+    return $module;
 }
 
 # --------------------------------------------------------------------
 sub matches_glob {
-  my ($file_spec, $glob) = @_;
-    # Strip leading '^' of resulting regex.
-  my $regex = substr(glob_to_regex($glob), 1);
-  return $file_spec =~ /$regex/;
+    my ($file_spec, $glob) = @_;
+        # Strip leading '^' of resulting regex.
+    my $regex = substr(glob_to_regex($glob), 1);
+    return $file_spec =~ /$regex/;
 }
 
 # --------------------------------------------------------------------
 package Test::Usage::Example;
 
 sub new {
-  my ($pkg, $label, $sub_ref) = @_;
-  my $self = bless {}, $pkg;
-  @{$self}{qw(label sub_ref)} = ($label, $sub_ref);
-  return $self;
+    my ($pkg, $label, $sub_ref) = @_;
+    my $self = bless {}, $pkg;
+    @{$self}{qw(label sub_ref)} = ($label, $sub_ref);
+    return $self;
 }
 
 # --------------------------------------------------------------------
@@ -982,20 +935,20 @@ and want to make your Test::Usage tests the ones to be run, you need
 to make Test::Usage a prerequisite in your Makefile.PL, and use a
 t/test.t file whose contents are like this:
 
-  use strict;
-  use FindBin qw($Bin);
-  use lib "$Bin/lib";
-  use Test::Usage;
+    use strict;
+    use FindBin qw($Bin);
+    use lib "$Bin/lib";
+    use Test::Usage;
 
-  files(
-    c => 0,
-    d => "$Bin/../lib",
-    i => "$Bin/../lib",
-    t => {
-      c => 0,
-      v => 2,
-    },
-  );
+    files(
+        c => 0,
+        d => "$Bin/../lib",
+        i => "$Bin/../lib",
+        t => {
+            c => 0,
+            v => 2,
+        },
+    );
 
 (Note that this will be evaluated in the 'main' package, where files()
 is visible.)
@@ -1019,7 +972,7 @@ Luc St-Louis, E<lt>lucs@cpan.orgE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2005 by Luc St-Louis
+Copyright (C) 2005-2008 by Luc St-Louis
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.3 or,

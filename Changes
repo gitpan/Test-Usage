@@ -1,11 +1,24 @@
 Revision history for Perl extension Test::Usage.
 
+0.07_50
+  + The fail option is now named 'f' instead of 'fail'.
+  + Windows colors are now explicity associated to their package.
+  + Added plabels() method.
+  + Save Windows color before changing it, so it can be restored.
+  + Improved the 'test' file contents.
+  + Supplied template renamed to TEMPLATE_T.pm.
+  + t/t4.t now has "1..1" after the "ok 1", instead of the other way
+    round (may have caused failing tests on some platforms; anyway, it
+    was wrong the other way round).
+  + Now has simpler README.
+  + Moved Manual type info from Test/Usage.pm to Test/Usage/Manual.pm.
+
 0.07 Tue Oct 25 10:42:05 2005
   + files() calculates total elapsed time by using the clock rather
     than by adding up subshelled times.
   + t/Foo.pm doesn't require perl 5.8.3 anymore.
   + Subshelled perl to run files() tests are now invoked with -w.
-  + files() now follows symlinks. Should be an option...
+  + files() now follows symlinks. Should perhaps be an option...
 
 0.06 Wed Jul 13 11:16:00 2005
   + Improved the POD.
