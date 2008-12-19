@@ -1,7 +1,7 @@
 package Test::Usage;
 
 use 5.008;
-our $VERSION = '0.07_50';
+our $VERSION = '0.08';
 
 =head1 NAME
 

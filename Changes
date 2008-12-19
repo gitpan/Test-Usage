@@ -1,5 +1,8 @@
 Revision history for Perl extension Test::Usage.
 
+0.08
+  + Same as 0.07_50
+
 0.07_50
   + The fail option is now named 'f' instead of 'fail'.
   + Windows colors are now explicity associated to their package.
